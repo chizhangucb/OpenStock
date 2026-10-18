@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import {
     WELCOME_EMAIL_TEMPLATE,
     NEWS_SUMMARY_EMAIL_TEMPLATE,
@@ -11,14 +12,30 @@ type EmailSendResult =
     | { status: 'skipped' }
     | { status: 'sent'; messageId: string };
 
-const hasEmailConfig = Boolean(process.env.NODEMAILER_EMAIL && process.env.NODEMAILER_PASSWORD);
+type MailOptions = { from: string; to: string; subject: string; text: string; html: string };
+type MailTransport = { sendMail: (options: MailOptions) => Promise<{ messageId: string }> };
 
-if (!hasEmailConfig) {
-    console.warn('⚠️ Email credentials are not configured. Welcome and news summary emails are disabled until NODEMAILER_EMAIL and NODEMAILER_PASSWORD are set.');
-}
+const resendApiKey = process.env.RESEND_API_KEY;
+const emailFrom = process.env.EMAIL_FROM?.trim();
+const hasNodemailerConfig = Boolean(process.env.NODEMAILER_EMAIL && process.env.NODEMAILER_PASSWORD);
 
-export const transporter = hasEmailConfig
-    ? nodemailer.createTransport({
+// Resend sends over HTTPS, for hosts that block outbound SMTP (e.g. Railway without Pro)
+const createResendTransport = (apiKey: string, from: string): MailTransport => {
+    const resend = new Resend(apiKey);
+    return {
+        // The callers' Gmail `from` is ignored: Resend only accepts addresses on a verified domain
+        sendMail: async ({ to, subject, text, html }) => {
+            const { data, error } = await resend.emails.send({ from, to, subject, text, html });
+            if (error || !data) {
+                throw new Error(`Resend failed to send email: ${error?.message ?? 'no response data'}`);
+            }
+            return { messageId: data.id };
+        },
+    };
+};
+
+const createNodemailerTransport = (): MailTransport => {
+    const gmail = nodemailer.createTransport({
         service: 'gmail',
         auth: {
             user: process.env.NODEMAILER_EMAIL!,
@@ -28,18 +45,34 @@ export const transporter = hasEmailConfig
         pool: true,
         maxConnections: 1,
         maxMessages: 3,
-    })
-    : null;
-
-if (transporter) {
-    transporter.verify((error) => {
+    });
+    gmail.verify((error) => {
         if (error) {
             console.error('❌ Nodemailer transporter verification failed:', error);
         } else {
             console.log('✅ Nodemailer transporter is ready to send emails');
         }
     });
-}
+    return gmail;
+};
+
+const createTransport = (): MailTransport | null => {
+    if (resendApiKey) {
+        if (!emailFrom) {
+            console.error('❌ RESEND_API_KEY is set but EMAIL_FROM is missing. Emails are disabled until EMAIL_FROM is set (e.g. "OpenStock <noreply@yourdomain.com>").');
+            return null;
+        }
+        console.log('✅ Resend is configured to send emails');
+        return createResendTransport(resendApiKey, emailFrom);
+    }
+    if (hasNodemailerConfig) return createNodemailerTransport();
+    console.warn('⚠️ Email is not configured. Welcome, alert, news summary and password reset emails are disabled until RESEND_API_KEY and EMAIL_FROM (or NODEMAILER_EMAIL and NODEMAILER_PASSWORD) are set.');
+    return null;
+};
+
+export const transporter = createTransport();
+
+export const isEmailConfigured = transporter !== null;
 
 export const sendWelcomeEmail = async ({ email, name, intro }: WelcomeEmailData) => {
     try {
