@@ -118,7 +118,7 @@ Charts always stream live from TradingView. Quotes, watchlist prices and alerts 
 | Accounts and data | Better Auth, MongoDB with Mongoose |
 | Market data | Finnhub, TradingView widgets, Adanos (sentiment) |
 | Background jobs | Inngest |
-| Email | Nodemailer (Gmail), Kit for the newsletter |
+| Email | Resend or Nodemailer (Gmail), Kit for the newsletter |
 | AI | Gemini, MiniMax or Siray |
 | Hosting | Vercel; a Docker image on GitHub Container Registry for self-hosting |
 
@@ -152,7 +152,8 @@ Every variable is listed with comments in [`.env.example`](.env.example). The on
 | `FINNHUB_API_KEY` | Yes | Market data. Or put several free keys, comma-separated, in `FINNHUB_API_KEYS`: they're rotated, and each adds 60 requests a minute |
 | `NEXT_PUBLIC_OPENSTOCK_DATA_MODE` | No | `cached` (hourly, the default) or `realtime` (every 15 seconds, with price alerts). Fixed when the app is built: rebuild after changing it |
 | `INNGEST_SIGNING_KEY`, `INNGEST_EVENT_KEY` | In production | Background jobs: welcome emails, price alerts and the weekly digest |
-| `NODEMAILER_EMAIL`, `NODEMAILER_PASSWORD` | No | Sending email through Gmail, with an app password. Without them, emails are skipped |
+| `RESEND_API_KEY`, `EMAIL_FROM` | No | Sending email through the Resend HTTPS API (use it where outbound SMTP is blocked, e.g. Railway). `EMAIL_FROM` is the sender on a domain verified in Resend, like `OpenStock <noreply@yourdomain.com>`. When `RESEND_API_KEY` is set, it is used instead of Gmail |
+| `NODEMAILER_EMAIL`, `NODEMAILER_PASSWORD` | No | Sending email through Gmail, with an app password. Without these or Resend, emails are skipped |
 | `GEMINI_API_KEY` (or MiniMax or Siray) | No | AI-written welcome emails and the news digest |
 | `ADANOS_API_KEY` | No | The sentiment card on stock pages |
 | `KIT_API_KEY`, `KIT_API_SECRET`, `KIT_WELCOME_FORM_ID` | No | The weekly digest newsletter in Kit |
@@ -207,8 +208,9 @@ OpenStock ships a [`railway.json`](railway.json) that builds the `Dockerfile`, c
    GEMINI_API_KEY=your_gemini_api_key
    INNGEST_SIGNING_KEY=your_inngest_signing_key
    INNGEST_EVENT_KEY=your_inngest_event_key
-   NODEMAILER_EMAIL=youraddress@gmail.com
-   NODEMAILER_PASSWORD=your_gmail_app_password
+   # Railway blocks outbound SMTP below the Pro plan, so send email through Resend
+   RESEND_API_KEY=your_resend_api_key
+   EMAIL_FROM=OpenStock <noreply@yourdomain.com>
    ```
 4. Under **Settings → Networking**, generate a public domain and redeploy.
 
@@ -255,7 +257,7 @@ __tests__/        Vitest tests
   | Price alert check | Every 5 minutes, in realtime mode |
   | Weekly news digest (a Kit broadcast) | Mondays at 09:00 UTC |
 
-- **Email**: Nodemailer (Gmail) sends welcome, alert and password-reset emails; Kit sends the weekly digest.
+- **Email**: Resend (when `RESEND_API_KEY` is set) or Nodemailer (Gmail) sends welcome, alert and password-reset emails; Kit sends the weekly digest.
 
 ## 🌍 Market support <a name="market-support"></a>
 

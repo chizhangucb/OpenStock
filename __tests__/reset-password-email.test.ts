@@ -1,30 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => {
+    const transporter = { sendMail: vi.fn() };
+    return { transporter, current: transporter as typeof transporter | null };
+});
 
 vi.mock('@/lib/nodemailer', () => ({
-    transporter: {
-        sendMail: vi.fn(),
+    get transporter() {
+        return mocks.current;
     },
 }));
 
-import { transporter } from '@/lib/nodemailer';
 import { sendPasswordResetEmail } from '@/lib/nodemailer/reset-password';
 
 describe('sendPasswordResetEmail', () => {
-    const originalEnv = { ...process.env };
-    const sendMailMock = vi.mocked(transporter!.sendMail);
+    const sendMailMock = mocks.transporter.sendMail;
 
     beforeEach(() => {
-        process.env = {
-            ...originalEnv,
-            NODEMAILER_EMAIL: 'sender@example.com',
-            NODEMAILER_PASSWORD: 'secret',
-        };
+        mocks.current = mocks.transporter;
         sendMailMock.mockReset();
-        sendMailMock.mockResolvedValue({ messageId: 'msg-123' } as never);
-    });
-
-    afterEach(() => {
-        process.env = { ...originalEnv };
+        sendMailMock.mockResolvedValue({ messageId: 'msg-123' });
     });
 
     it('escapes interpolated values before building the HTML email', async () => {
@@ -53,9 +48,8 @@ describe('sendPasswordResetEmail', () => {
         expect(mailOptions.html).not.toContain('%253A');
     });
 
-    it('throws when reset email credentials are missing', async () => {
-        delete process.env.NODEMAILER_EMAIL;
-        delete process.env.NODEMAILER_PASSWORD;
+    it('throws when no email transport is configured', async () => {
+        mocks.current = null;
 
         await expect(
             sendPasswordResetEmail({

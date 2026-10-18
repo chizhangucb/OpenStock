@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { INVESTMENT_GOALS, PREFERRED_INDUSTRIES, RISK_TOLERANCE_OPTIONS } from "@/lib/constants";
 import countryList from "react-select-country-list";
 import { clientIp, isRateLimited, TOO_MANY_ATTEMPTS } from "@/lib/rate-limit";
+import { isEmailConfigured } from "@/lib/nodemailer";
 
 const isOption = (options: readonly { value: string }[], value: unknown) => options.some((o) => o.value === value);
 const COUNTRY_CODES = new Set(countryList().getValues()); // the same list the sign-up country picker shows
@@ -94,7 +95,7 @@ export const signInWithSocial = async (provider: 'google' | 'github') => {
 }
 
 export const requestPasswordResetEmail =async ({ email }: { email: string }) => {
-    if (!process.env.NODEMAILER_EMAIL || !process.env.NODEMAILER_PASSWORD) {
+    if (!isEmailConfigured) {
         return { success: false, error: 'Password reset email is not configured.' }
     }
     // Every request sends a real email from our Gmail; unlimited requests could exhaust its daily quota
